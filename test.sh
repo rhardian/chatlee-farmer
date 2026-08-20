@@ -22,12 +22,11 @@ python3 -c "import requests; print('   ✓ requests installed')"
 python3 -c "from bs4 import BeautifulSoup; print('   ✓ beautifulsoup4 installed')"
 echo
 
-echo "4. Testing local Turnstile solver..."
-SOLVER_STATUS=$(curl -s http://127.0.0.1:8003/health 2>&1 || echo "NOT_RUNNING")
-if [[ "$SOLVER_STATUS" == *"ok"* ]] || [[ "$SOLVER_STATUS" == *"healthy"* ]]; then
-    echo "   ✓ Local solver responding at :8003"
+echo "4. Checking 2captcha API key..."
+if [ -f ~/.agent/credentials/2captcha-api-key.env ]; then
+    echo "   ✓ 2captcha API key found"
 else
-    echo "   ⚠ Local solver not responding (start it before running)"
+    echo "   ⚠ 2captcha API key NOT found at ~/.agent/credentials/2captcha-api-key.env"
 fi
 echo
 
