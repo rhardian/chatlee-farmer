@@ -299,8 +299,22 @@ def main():
     print(f"Output: {csv_path}")
     print("=" * 60)
     
-    # Referral chain: account 1 uses initial ref, account 2 uses account 1's ref, etc.
+    # Use same referral for ALL accounts (no chain per user request)
     current_ref_code = initial_ref_code
+    
+    # Load used email bases (to avoid emailnator recycling dot-variations)
+    used_bases = set()
+    if csv_path.exists():
+        try:
+            import csv as csv_mod
+            with open(csv_path, newline='') as f:
+                for row in csv_mod.DictReader(f):
+                    em = row.get("email", "")
+                    if em:
+                        used_bases.add(em.split('@')[0].replace('.', ''))
+        except Exception:
+            pass
+    print(f"Known used email bases: {len(used_bases)}")
     
     for i in range(args.count):
         try:
@@ -314,10 +328,19 @@ def main():
             result = None
             # Retry with fresh email up to 5 times (emailnator may recycle used emails)
             for email_attempt in range(5):
-                # Generate new disposable email
+                # Generate new disposable email (with uniqueness check via API)
                 print(f"  Generating disposable email...")
-                email = email_client.generate_email()
+                
+                def email_is_usable(em):
+                    """Check email base not in used list (emailnator recycles dot-variations)"""
+                    base = em.split('@')[0].replace('.', '')
+                    if base in used_bases:
+                        return False
+                    return True
+                
+                email = email_client.generate_email(check_func=email_is_usable)
                 print(f"  Generated: {email}")
+                used_bases.add(email.split('@')[0].replace('.', ''))
                 
                 # Create API client (fresh session per account)
                 api = ChatleeAPI(config["chatlee_api"]["base_url"])
@@ -348,10 +371,7 @@ def main():
             if result:
                 # Save immediately
                 save_account(csv_path, result)
-                
-                # Update referral code for next account
-                current_ref_code = result["ref_code"]
-                print(f"  → Next account will use ref: {current_ref_code}")
+                print(f"  ✓ Account {i+1} created (ref: {current_ref_code})")
             else:
                 print(f"  ✗ FAILED: Account creation failed after 3 attempts")
         

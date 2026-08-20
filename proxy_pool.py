@@ -58,7 +58,10 @@ class ProxyPool:
         """
         Find a proxy that:
         1. Works (egress OK)
-        2. Is not rate-limited by Chatlee (register returns 403 not 429/400)
+        2. Can reach Chatlee API (not blocked)
+        
+        IMPORTANT: does NOT burn the proxy by POSTing register — that consumes
+        the per-IP registration quota. Only uses lightweight check-email.
         
         Returns:
             str: Fresh proxy string or None
@@ -72,41 +75,29 @@ class ProxyPool:
             if not ip:
                 continue
             
-            # Check if Chatlee rate-limits this IP (register with invalid captcha)
+            # Lightweight probe: check-email with random unique email.
+            # 200 = proxy can reach Chatlee and is likely fresh.
+            # 429 = rate-limited, 403/blocked = burned.
             try:
                 s = requests.Session()
                 s.proxies = self.get_proxy_dict(proxy)
                 s.headers.update({
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
                     "Accept": "application/json",
-                    "Origin": chatlee_base,
-                    "Referer": f"{chatlee_base}/sign-in",
-                    "Content-Type": "application/json"
                 })
-                s.cookies.set("invite", "348700542631137280", domain="chatlee.io")
                 
                 import random
                 import string
-                # Truly unique email per probe (avoid collisions from shared proxy users)
-                uniq = ''.join(random.choices(string.ascii_lowercase + string.digits, k=14))
-                r = s.post(
-                    f"{chatlee_base}/api/auth/register",
-                    json={
-                        "login": "px" + uniq[:10],
-                        "email": f"px{uniq}@gmail.com",
-                        "password": "SecurePass123!",
-                        "password2": "SecurePass123!",
-                        "name": "Proxy Test",
-                        "ref": None,
-                        "turnstileToken": "invalid-token-for-probing"
-                    },
+                uniq = ''.join(random.choices(string.ascii_lowercase + string.digits, k=12))
+                r = s.get(
+                    f"{chatlee_base}/api/auth/check-email",
+                    params={"email": f"probe{uniq}@gmail.com"},
                     timeout=timeout
                 )
                 
-                # 403 = fresh (only captcha fails). 429 = rate limited. 400 = burned/shared.
-                if r.status_code == 403:
+                if r.status_code == 200:
                     return proxy
-                print(f"  ⚠ Proxy {proxy.split('@')[1]} burned (HTTP {r.status_code})")
+                print(f"  ⚠ Proxy {proxy.split('@')[1]} blocked (HTTP {r.status_code})")
             except Exception as e:
                 print(f"  ⚠ Proxy {proxy.split('@')[1]} error: {str(e)[:50]}")
         

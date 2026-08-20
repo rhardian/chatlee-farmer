@@ -161,6 +161,29 @@ class ChatleeAPI:
         response.raise_for_status()
         return response.json()
     
+    def claim_task(self, task_id):
+        """
+        Claim task reward (try multiple endpoint patterns)
+        
+        Returns:
+            dict: Claim response
+        """
+        for endpoint in [f"{self.base_url}/api/tasks/{task_id}/claim",
+                         f"{self.base_url}/api/tasks/{task_id}/complete",
+                         f"{self.base_url}/api/tasks/claim"]:
+            try:
+                if 'claim' in endpoint and not endpoint.endswith('/claim'):
+                    response = self.session.post(endpoint, json={"task_id": task_id})
+                else:
+                    response = self.session.post(endpoint, json={})
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status") == "ok" or "success" in str(data).lower():
+                        return data
+            except Exception:
+                continue
+        return None
+    
     def complete_onboarding(self):
         """
         Complete onboarding task
@@ -294,6 +317,16 @@ class ChatleeAPI:
                             print(f"    ✗ Like failed: {e}")
                             continue
                     if liked >= likes_needed:
+                        # Claim reward
+                        try:
+                            claim = self.claim_task(task_id)
+                            if claim:
+                                print(f"    ✓ Claimed task {task_id} reward!")
+                            else:
+                                print(f"    ⚠ Task {task_id} done, claim endpoint not found - trying start")
+                                self.start_task(task_id)
+                        except Exception as e:
+                            print(f"    ⚠ Claim error: {e}")
                         tasks_completed += 1
                 
                 elif task_type == "follow" and status == 0:
@@ -319,6 +352,16 @@ class ChatleeAPI:
                             print(f"    ✗ Follow failed: {e}")
                             continue
                     if followed >= follows_needed:
+                        # Claim reward
+                        try:
+                            claim = self.claim_task(task_id)
+                            if claim:
+                                print(f"    ✓ Claimed task {task_id} reward!")
+                            else:
+                                print(f"    ⚠ Task {task_id} done, claim endpoint not found - trying start")
+                                self.start_task(task_id)
+                        except Exception as e:
+                            print(f"    ⚠ Claim error: {e}")
                         tasks_completed += 1
                 
                 elif task_type == "onboarding":

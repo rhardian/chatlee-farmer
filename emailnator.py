@@ -30,12 +30,14 @@ class EmailnatorClient:
             return True
         return False
     
-    def generate_email(self, provider="dotGmail"):
+    def generate_email(self, provider="dotGmail", max_attempts=10, check_func=None):
         """
         Generate a new disposable Gmail address
         
         Args:
             provider: "dotGmail" | "googleMail" | both as list
+            max_attempts: Max generation attempts (to avoid recycled emails)
+            check_func: Optional callable(email) -> bool that returns True if email is usable
             
         Returns:
             str: Generated email address
@@ -43,23 +45,38 @@ class EmailnatorClient:
         if not self.session.headers.get("X-XSRF-TOKEN"):
             self._init_csrf()
         
-        payload = {"email": [provider]}
-        resp = self.session.post(
-            f"{self.base_url}/generate-email",
-            json=payload,
-            timeout=15
-        )
+        for attempt in range(max_attempts):
+            # Alternate providers to avoid collisions
+            p = provider
+            if attempt % 2 == 1 and provider == "dotGmail":
+                p = "googleMail"
+            
+            payload = {"email": [p]}
+            resp = self.session.post(
+                f"{self.base_url}/generate-email",
+                json=payload,
+                timeout=15
+            )
+            
+            if resp.status_code != 200:
+                raise Exception(f"Email generation failed: HTTP {resp.status_code}")
+            
+            data = resp.json()
+            emails = data.get("email", [])
+            if not emails:
+                continue
+            
+            email = emails[0]
+            
+            # If check function provided, verify uniqueness
+            if check_func and not check_func(email):
+                print(f"  ⚠ Email taken ({email}), regenerating...")
+                continue
+            
+            self.email = email
+            return email
         
-        if resp.status_code != 200:
-            raise Exception(f"Email generation failed: HTTP {resp.status_code}")
-        
-        data = resp.json()
-        emails = data.get("email", [])
-        if not emails:
-            raise Exception("No email in response")
-        
-        self.email = emails[0]
-        return self.email
+        raise Exception(f"Could not generate unique email after {max_attempts} attempts")
     
     def get_messages(self, email=None):
         """
