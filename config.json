@@ -1,0 +1,20 @@
+{
+  "captcha_solver": {
+    "url": "https://2captcha.com",
+    "timeout": 180
+  },
+  "chatlee_api": {
+    "base_url": "https://chatlee.io",
+    "sitekey": "0x4AAAAAACsvpSIABYu4ZzQP"
+  },
+  "emailnator": {
+    "base_url": "https://www.emailnator.com"
+  },
+  "accounts_output": "accounts.csv",
+  "retry_config": {
+    "turnstile_retries": 3,
+    "turnstile_retry_delay": 5,
+    "otp_timeout": 120,
+    "rate_limit_backoff": [10, 30, 60]
+  }
+}
